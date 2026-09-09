@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order & Invoice Tracker (Supabase Ready)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+    <!-- Header Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                
+                <!-- Logo & Connection Status -->
+                <div class="flex items-center gap-3">
+                    <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-sm">
+                        <i data-lucide="package-search" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg font-bold text-slate-900 leading-none">OrderTracker</h1>
+                            <span id="connectionBadge" onclick="openConfigModal()" class="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition" title="Klik untuk atur Supabase">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span id="badgeText">Lokal</span>
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">Pelacak Order & Invoice + Cloud Supabase</p>
+                    </div>
+                </div>
+
+                <!-- Action Header Buttons -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <button onclick="openConfigModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition" title="Seting Database Supabase">
+                        <i data-lucide="database" class="w-4 h-4 text-slate-600"></i>
+                        <span class="hidden md:inline">Koneksi Supabase</span>
+                    </button>
+
+                    <button onclick="exportToCSV()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm">
+                        <i data-lucide="download" class="w-4 h-4 text-slate-500"></i>
+                        <span class="hidden sm:inline">CSV</span>
+                    </button>
+
+                    <button onclick="openModal()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition shadow-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span>Tambah Data</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+        <!-- Supabase Status Alert Banner -->
+        <div id="supabaseNotice" class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+            <div class="flex items-start gap-3">
+                <div class="p-2 bg-indigo-600 text-white rounded-lg mt-0.5 sm:mt-0">
+                    <i data-lucide="cloud-lightning" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-indigo-900">Hubungkan ke Supabase Cloud Database</h3>
+                    <p class="text-xs text-indigo-700 mt-0.5">Saat ini Anda menggunakan mode penyimpanan lokal. Hubungkan akun Supabase Anda agar data tersimpan aman di cloud PostgreSQL dan dapat diakses bersama.</p>
+                </div>
+            </div>
+            <button onclick="openConfigModal()" class="whitespace-nowrap px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition shadow-sm">
+                Atur Supabase
+            </button>
+        </div>
+
+        <!-- Stat Widgets -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                    <i data-lucide="file-text" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Total Data</p>
+                    <p class="text-xl font-bold text-slate-900" id="statTotal">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-amber-50 text-amber-600 rounded-lg">
+                    <i data-lucide="clock" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Pending</p>
+                    <p class="text-xl font-bold text-slate-900" id="statPending">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg">
+                    <i data-lucide="truck" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Diproses / Dikirim</p>
+                    <p class="text-xl font-bold text-slate-900" id="statProcess">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Lunas / Selesai</p>
+                    <p class="text-xl font-bold text-slate-900" id="statCompleted">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div class="relative w-full md:w-96">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="searchInput" oninput="renderTable()" placeholder="Cari No Order, Invoice, Customer..." 
+                       class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+            </div>
+
+            <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                <span class="text-xs font-medium text-slate-500 whitespace-nowrap hidden sm:inline">Filter Status:</span>
+                <select id="statusFilter" onchange="renderTable()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <option value="ALL">Semua Status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Diproses">Diproses</option>
+                    <option value="Dikirim">Dikirim</option>
+                    <option value="Lunas">Lunas</option>
+                    <option value="Selesai">Selesai</option>
+                    <option value="Batal">Batal</option>
+                </select>
+                <button onclick="loadData()" title="Refresh Data" class="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Data Table Container -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <tr>
+                            <th class="px-4 py-3">No. Order</th>
+                            <th class="px-4 py-3">No. Invoice</th>
+                            <th class="px-4 py-3">Pelanggan</th>
+                            <th class="px-4 py-3">Tanggal</th>
+                            <th class="px-4 py-3">Nominal</th>
+                            <th class="px-4 py-3">Status</th>
+                            <th class="px-4 py-3 text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trackerTableBody" class="divide-y divide-slate-100">
+                        <!-- Data rows injected dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loadingState" class="py-12 text-center hidden">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent mb-2"></div>
+                <p class="text-xs text-slate-500">Memuat data dari database...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden py-12 text-center">
+                <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="inbox" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-slate-800 font-semibold mb-1">Tidak ada data ditemukan</h3>
+                <p class="text-xs text-slate-500 max-w-sm mx-auto">Coba ubah kata kunci pencarian atau tambah data tracking baru.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Form (Tambah / Edit Data) -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-lg overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="text-base font-semibold text-slate-900" id="modalTitle">Tambah Data Tracking</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="trackerForm" onsubmit="saveData(event)" class="p-6 space-y-4">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nomor Order <span class="text-rose-500">*</span></label>
+                        <input type="text" id="orderNo" required placeholder="Contoh: ORD-2026-001"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nomor Invoice <span class="text-rose-500">*</span></label>
+                        <input type="text" id="invoiceNo" required placeholder="Contoh: INV-2026-001"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Pelanggan <span class="text-rose-500">*</span></label>
+                        <input type="text" id="customerName" required placeholder="Nama Toko / PT / Individu"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Tanggal</label>
+                        <input type="date" id="orderDate" required
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nominal (Rp)</label>
+                        <input type="number" id="amount" placeholder="0" min="0" step="1000"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                        <select id="status" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                            <option value="Pending">Pending</option>
+                            <option value="Diproses">Diproses</option>
+                            <option value="Dikirim">Dikirim</option>
+                            <option value="Lunas">Lunas</option>
+                            <option value="Selesai">Selesai</option>
+                            <option value="Batal">Batal</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Catatan / Keterangan</label>
+                    <textarea id="notes" rows="2" placeholder="Catatan tambahan seperti ekspedisi, resi, dll..."
+                              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                        Batal
+                    </button>
+                    <button type="submit" id="saveBtn" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition shadow-sm">
+                        Simpan Data
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Config Supabase -->
+    <div id="configModalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="database" class="w-5 h-5 text-indigo-600"></i>
+                    <h2 class="text-base font-semibold text-slate-900">Pengaturan Supabase</h2>
+                </div>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="saveSupabaseConfig(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Supabase Project URL</label>
+                    <input type="url" id="cfgUrl" placeholder="https://xyz.supabase.co"
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <p class="text-[11px] text-slate-500 mt-1">Dapatkan di Supabase Dashboard -> Project Settings -> API</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Supabase Anon Key</label>
+                    <input type="password" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                    <button type="button" onclick="clearSupabaseConfig()" class="text-xs text-rose-600 hover:underline">
+                        Hapus Koneksi
+                    </button>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeConfigModal()" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+                            Batal
+                        </button>
+                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition shadow-sm">
+                            Simpan & Hubungkan
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg border border-slate-700 flex items-center gap-3 transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400" id="toastIcon"></i>
+        <span class="text-sm font-medium" id="toastMessage">Berhasil disimpan</span>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const STORAGE_KEY = 'ORDER_INVOICE_TRACKER_DATA';
+        const CFG_KEY = 'SUPABASE_CONFIG_DATA';
+
+        let trackerData = [];
+        let supabaseClient = null;
+        let isSupabaseActive = false;
+
+        const defaultData = [
+            { id: 1, orderNo: 'ORD-2026-001', invoiceNo: 'INV-2026-001', customerName: 'PT Maju Bersama', orderDate: '2026-09-01', amount: 15500000, status: 'Lunas', notes: 'Pembayaran via BCA Transfer' },
+            { id: 2, orderNo: 'ORD-2026-002', invoiceNo: 'INV-2026-002', customerName: 'Toko Sumber Rejeki', orderDate: '2026-09-04', amount: 8200000, status: 'Dikirim', notes: 'Resi JNE: 8829103948' },
+            { id: 3, orderNo: 'ORD-2026-003', invoiceNo: 'INV-2026-003', customerName: 'CV Karya Utama', orderDate: '2026-09-07', amount: 24000000, status: 'Diproses', notes: 'Menunggu konfirmasi gudang' },
+            { id: 4, orderNo: 'ORD-2026-004', invoiceNo: 'INV-2026-004', customerName: 'Budi Santoso', orderDate: '2026-09-08', amount: 3500000, status: 'Pending', notes: 'Tagihan telah dikirim ke WA' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initSupabase();
+            loadData();
+            document.getElementById('orderDate').valueAsDate = new Date();
+            lucide.createIcons();
+        });
+
+        function initSupabase() {
+            const rawCfg = localStorage.getItem(CFG_KEY);
+            if (rawCfg) {
+                try {
+                    const cfg = JSON.parse(rawCfg);
+                    if (cfg.url && cfg.key) {
+                        supabaseClient = window.supabase.createClient(cfg.url, cfg.key);
+                        isSupabaseActive = true;
+                        updateBadge(true);
+                        document.getElementById('supabaseNotice').classList.add('hidden');
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Supabase init error', e);
+                }
+            }
+            isSupabaseActive = false;
+            updateBadge(false);
+            document.getElementById('supabaseNotice').classList.remove('hidden');
+        }
+
+        function updateBadge(active) {
+            const badge = document.getElementById('connectionBadge');
+            const text = document.getElementById('badgeText');
+
+            if (active) {
+                badge.className = "cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:opacity-80 transition";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Supabase Cloud</span>`;
+            } else {
+                badge.className = "cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>Local Mode</span>`;
+            }
+        }
+
+        async function loadData() {
+            showLoading(true);
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('orders')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+
+                    trackerData = (data || []).map(d => ({
+                        id: d.id,
+                        orderNo: d.order_no,
+                        invoiceNo: d.invoice_no,
+                        customerName: d.customer_name,
+                        orderDate: d.order_date,
+                        amount: d.amount,
+                        status: d.status,
+                        notes: d.notes
+                    }));
+                } catch (err) {
+                    console.error(err);
+                    showToast('Gagal memuat data dari Supabase. Menggunakan data lokal.', true);
+                    loadLocalData();
+                }
+            } else {
+                loadLocalData();
+            }
+
+            showLoading(false);
+            renderTable();
+        }
+
+        function loadLocalData() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                try { trackerData = JSON.parse(raw); } catch (e) { trackerData = [...defaultData]; }
+            } else {
+                trackerData = [...defaultData];
+                saveLocalToStorage();
+            }
+        }
+
+        function saveLocalToStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData));
+        }
+
+        async function saveData(e) {
+            e.preventDefault();
+            const editId = parseInt(document.getElementById('editIndex').value);
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerText = 'Menyimpan...';
+
+            const payload = {
+                orderNo: document.getElementById('orderNo').value.trim(),
+                invoiceNo: document.getElementById('invoiceNo').value.trim(),
+                customerName: document.getElementById('customerName').value.trim(),
+                orderDate: document.getElementById('orderDate').value,
+                amount: parseFloat(document.getElementById('amount').value) || 0,
+                status: document.getElementById('status').value,
+                notes: document.getElementById('notes').value.trim()
+            };
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const dbPayload = {
+                        order_no: payload.orderNo,
+                        invoice_no: payload.invoiceNo,
+                        customer_name: payload.customerName,
+                        order_date: payload.orderDate,
+                        amount: payload.amount,
+                        status: payload.status,
+                        notes: payload.notes
+                    };
+
+                    if (editId !== -1) {
+                        const { error } = await supabaseClient.from('orders').update(dbPayload).eq('id', editId);
+                        if (error) throw error;
+                        showToast('Data berhasil diperbarui di Supabase');
+                    } else {
+                        const { error } = await supabaseClient.from('orders').insert([dbPayload]);
+                        if (error) throw error;
+                        showToast('Data baru tersimpan di Supabase');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast('Gagal menyimpan ke Supabase: ' + err.message, true);
+                }
+            } else {
+                // Local save
+                if (editId !== -1) {
+                    const idx = trackerData.findIndex(d => d.id === editId);
+                    if (idx !== -1) trackerData[idx] = { id: editId, ...payload };
+                    showToast('Data berhasil diperbarui (Lokal)');
+                } else {
+                    trackerData.unshift({ id: Date.now(), ...payload });
+                    showToast('Data baru tersimpan (Lokal)');
+                }
+                saveLocalToStorage();
+            }
+
+            saveBtn.disabled = false;
+            saveBtn.innerText = 'Simpan Data';
+            closeModal();
+            loadData();
+        }
+
+        async function deleteData(id) {
+            if (!confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const { error } = await supabaseClient.from('orders').delete().eq('id', id);
+                    if (error) throw error;
+                    showToast('Data terhapus dari Supabase');
+                } catch (err) {
+                    showToast('Gagal menghapus data Supabase', true);
+                }
+            } else {
+                trackerData = trackerData.filter(d => d.id !== id);
+                saveLocalToStorage();
+                showToast('Data berhasil dihapus');
+            }
+            loadData();
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').innerText = trackerData.length;
+            document.getElementById('statPending').innerText = trackerData.filter(d => d.status === 'Pending').length;
+            document.getElementById('statProcess').innerText = trackerData.filter(d => ['Diproses', 'Dikirim'].includes(d.status)).length;
+            document.getElementById('statCompleted').innerText = trackerData.filter(d => ['Lunas', 'Selesai'].includes(d.status)).length;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('trackerTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            const filtered = trackerData.filter(item => {
+                const matchQuery = item.orderNo.toLowerCase().includes(query) ||
+                                   item.invoiceNo.toLowerCase().includes(query) ||
+                                   item.customerName.toLowerCase().includes(query) ||
+                                   (item.notes && item.notes.toLowerCase().includes(query));
+
+                const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
+                return matchQuery && matchStatus;
+            });
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+
+                filtered.forEach((item) => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50/80 transition';
+
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 font-semibold text-indigo-600">${escapeHtml(item.orderNo)}</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">${escapeHtml(item.invoiceNo)}</td>
+                        <td class="px-4 py-3 text-slate-800">${escapeHtml(item.customerName)}</td>
+                        <td class="px-4 py-3 text-slate-500 whitespace-nowrap">${formatDate(item.orderDate)}</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">${formatRupiah(item.amount)}</td>
+                        <td class="px-4 py-3">${getStatusBadge(item.status)}</td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <button onclick="editData(${item.id})" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
+                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="deleteData(${item.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition" title="Hapus">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            updateStats();
+            lucide.createIcons();
+        }
+
+        function getStatusBadge(status) {
+            const styles = {
+                'Pending': 'bg-amber-50 text-amber-700 border-amber-200',
+                'Diproses': 'bg-blue-50 text-blue-700 border-blue-200',
+                'Dikirim': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                'Lunas': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                'Selesai': 'bg-teal-50 text-teal-700 border-teal-200',
+                'Batal': 'bg-rose-50 text-rose-700 border-rose-200'
+            };
+            const style = styles[status] || 'bg-slate-100 text-slate-600 border-slate-200';
+            return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style}">${status}</span>`;
+        }
+
+        function openModal(isEdit = false) {
+            document.getElementById('modalTitle').innerText = isEdit ? 'Edit Data Tracking' : 'Tambah Data Tracking';
+            if (!isEdit) {
+                document.getElementById('trackerForm').reset();
+                document.getElementById('editIndex').value = '-1';
+                document.getElementById('orderDate').valueAsDate = new Date();
+            }
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
+
+        function editData(id) {
+            const item = trackerData.find(d => d.id === id);
+            if (!item) return;
+
+            document.getElementById('editIndex').value = item.id;
+            document.getElementById('orderNo').value = item.orderNo;
+            document.getElementById('invoiceNo').value = item.invoiceNo;
+            document.getElementById('customerName').value = item.customerName;
+            document.getElementById('orderDate').value = item.orderDate;
+            document.getElementById('amount').value = item.amount || '';
+            document.getElementById('status').value = item.status;
+            document.getElementById('notes').value = item.notes || '';
+
+            openModal(true);
+        }
+
+        // Supabase Config Modal
+        function openConfigModal() {
+            const raw = localStorage.getItem(CFG_KEY);
+            if (raw) {
+                try {
+                    const cfg = JSON.parse(raw);
+                    document.getElementById('cfgUrl').value = cfg.url || '';
+                    document.getElementById('cfgKey').value = cfg.key || '';
+                } catch(e){}
+            }
+            document.getElementById('configModalOverlay').classList.remove('hidden');
+        }
+
+        function closeConfigModal() { document.getElementById('configModalOverlay').classList.add('hidden'); }
+
+        function saveSupabaseConfig(e) {
+            e.preventDefault();
+            const url = document.getElementById('cfgUrl').value.trim();
+            const key = document.getElementById('cfgKey').value.trim();
+
+            if (!url || !key) {
+                alert('Harap isi Supabase Project URL dan Anon Key.');
+                return;
+            }
+
+            localStorage.setItem(CFG_KEY, JSON.stringify({ url, key }));
+            initSupabase();
+            closeConfigModal();
+            showToast('Koneksi Supabase tersimpan! Memuat data...');
+            loadData();
+        }
+
+        function clearSupabaseConfig() {
+            if (confirm('Apakah Anda ingin menghapus koneksi Supabase dan kembali ke mode lokal?')) {
+                localStorage.removeItem(CFG_KEY);
+                supabaseClient = null;
+                initSupabase();
+                closeConfigModal();
+                showToast('Koneksi Supabase dihapus');
+                loadData();
+            }
+        }
+
+        // Helpers
+        function exportToCSV() {
+            if (trackerData.length === 0) return alert('Tidak ada data untuk diekspor.');
+            const headers = ['No Order', 'No Invoice', 'Nama Pelanggan', 'Tanggal', 'Nominal', 'Status', 'Catatan'];
+            const rows = trackerData.map(d => [
+                `"${d.orderNo}"`, `"${d.invoiceNo}"`, `"${d.customerName}"`, `"${d.orderDate}"`, d.amount, `"${d.status}"`, `"${(d.notes || '').replace(/"/g, '""')}"`
+            ]);
+            const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+            const link = document.createElement('a');
+            link.setAttribute('href', encodeURI(csvContent));
+            link.setAttribute('download', `Tracking_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('Ekspor CSV berhasil');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingState').classList.toggle('hidden', !show);
+            document.getElementById('trackerTableBody').classList.toggle('hidden', show);
+        }
+
+        function formatRupiah(num) {
+            if (!num || isNaN(num)) return 'Rp 0';
+            return 'Rp ' + num.toLocaleString('id-ID');
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const parts = dateStr.split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.innerText = text || '';
+            return div.innerHTML;
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = msg;
+            toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
