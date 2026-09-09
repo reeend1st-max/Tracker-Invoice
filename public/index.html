@@ -86,10 +86,10 @@
                     <i data-lucide="file-spreadsheet" class="w-7 h-7 text-white"></i>
                 </div>
                 <div>
-                    <h3 class="text-base font-bold text-white">Sudah Mendukung 29 Kolom Excel & Kapasitas File Besar!</h3>
+                    <h3 class="text-base font-bold text-white">Parser Cerdas Excel & Multiline Header Ready!</h3>
                     <p class="text-xs text-emerald-50 mt-1 max-w-2xl leading-relaxed">
-                        Cukup upload file Excel data order Anda (.xlsx / .xls). Aplikasi secara otomatis membaca kolom 
-                        <span class="underline decoration-emerald-200">Entity, Business Unit, Transaksi, Invoice, Pelanggan, Principal, Item Description, Qty, Harga, Kota, dll</span> dengan dukungan penyimpanan browser berkapasitas besar (IndexedDB).
+                        Cukup upload file Excel data order Anda (.xlsx / .xls). Aplikasi secara otomatis mendeteksi baris header dan membaca kolom 
+                        <span class="underline decoration-emerald-200">Entity, Business Unit, Transaksi, Invoice, Pelanggan, Principal, Item Description, Qty, Harga, Kota, dll</span> tanpa ada baris kosong bayangan.
                     </p>
                 </div>
             </div>
@@ -653,7 +653,7 @@
         }
 
         async function saveLocalToStorage() {
-            // 1. Primary: Save to IndexedDB (No 5MB quota limit!)
+            // Primary: Save to IndexedDB (No 5MB quota limit!)
             try {
                 const db = await getDB();
                 const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -671,20 +671,20 @@
                 console.warn('IndexedDB save warning:', err);
             }
 
-            // 2. Safe localStorage fallback (silently ignore quota exceptions)
+            // Safe localStorage fallback
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData.slice(0, 100)));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData.slice(0, 50)));
             } catch (e) {
-                // Quota exceeded - ignored because IndexedDB stores everything safely
+                // Quota exceeded ignored
             }
         }
 
-        // SMART EXCEL & CSV IMPORTER FOR ALL 29 COLUMNS
+        // INTELLIGENT MULTI-LINE EXCEL & CSV IMPORTER
         async function importExcelOrCSV(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            showToast('Membaca file Excel...', false);
+            showToast('Membaca & Memproses file Excel...', false);
 
             const reader = new FileReader();
             reader.onload = async function(e) {
@@ -694,30 +694,86 @@
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
 
-                    const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                    // Convert to 2D matrix array to handle offset headers, multi-line headers, & blank rows
+                    const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-                    if (!rawRows || rawRows.length === 0) {
+                    if (!matrix || matrix.length === 0) {
                         alert('File Excel kosong atau tidak berisi data.');
                         return;
                     }
 
-                    const parsedItems = rawRows.map((row, idx) => {
-                        return {
-                            id: Date.now() + Math.random(),
+                    // Automatically detect header row
+                    let headerIdx = -1;
+                    for (let r = 0; r < Math.min(matrix.length, 15); r++) {
+                        const rowStr = matrix[r].map(c => c.toString().toLowerCase()).join(' ');
+                        if (rowStr.includes('invoice') || rowStr.includes('order') || rowStr.includes('pelanggan') || rowStr.includes('item') || rowStr.includes('transaksi') || rowStr.includes('principal')) {
+                            headerIdx = r;
+                            break;
+                        }
+                    }
+
+                    if (headerIdx === -1) headerIdx = 0;
+
+                    // Clean headers: replace newlines, carriage returns, & extra spaces
+                    const headers = matrix[headerIdx].map(h => h.toString().replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim());
+
+                    const rawRows = [];
+                    for (let r = headerIdx + 1; r < matrix.length; r++) {
+                        const rowArray = matrix[r];
+                        if (!rowArray || rowArray.length === 0) continue;
+
+                        const rowObj = {};
+                        let hasData = false;
+
+                        headers.forEach((colName, colIdx) => {
+                            if (colName) {
+                                const val = rowArray[colIdx] !== undefined ? rowArray[colIdx] : '';
+                                rowObj[colName] = val;
+                                if (val !== '' && val !== null && val !== undefined) hasData = true;
+                            }
+                        });
+
+                        if (hasData) {
+                            rawRows.push(rowObj);
+                        }
+                    }
+
+                    if (rawRows.length === 0) {
+                        alert('Tidak ada baris data yang ditemukan di bawah header Excel.');
+                        return;
+                    }
+
+                    const parsedItems = [];
+
+                    rawRows.forEach((row, idx) => {
+                        const order_number = findCol(row, ['order number', 'no order', 'nomor order', 'order_no']);
+                        const no_invoice = findCol(row, ['no invoice', 'invoice', 'no. invoice', 'inv']);
+                        const nama_pelanggan = findCol(row, ['nama pelanggan', 'pelanggan', 'customer']);
+                        const item_description = findCol(row, ['item description', 'deskripsi', 'nama barang', 'item']);
+                        const total_harga = parseNum(findCol(row, ['total harga', 'total', 'grand total']));
+                        const qty = parseNum(findCol(row, ['uty', 'qty', 'quantity', 'jumlah']));
+
+                        // Ignore completely empty phantom rows
+                        if (!order_number && !no_invoice && !nama_pelanggan && !item_description && total_harga === 0 && qty === 0) {
+                            return;
+                        }
+
+                        parsedItems.push({
+                            id: `EXCEL-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
                             entity: findCol(row, ['entity', 'entitas']),
                             business_unit: findCol(row, ['business & unit', 'business unit', 'unit']),
                             jenis_transaksi: findCol(row, ['jenis transaksi', 'jenis transaks', 'transaksi']),
-                            nama_pelanggan: findCol(row, ['nama pelanggan', 'pelanggan', 'customer']),
-                            no_invoice: findCol(row, ['no invoice', 'invoice', 'no. invoice', 'inv']),
+                            nama_pelanggan: nama_pelanggan || 'Pelanggan General',
+                            no_invoice: no_invoice || '-',
                             order_date: normalizeDate(findCol(row, ['order date', 'tanggal order', 'tgl order', 'order_date'])),
                             accounting_date: normalizeDate(findCol(row, ['accounting date', 'tgl accounting', 'accounting_date'])),
                             nama_kategori: findCol(row, ['nama kategori', 'kategori']),
                             principal: findCol(row, ['principal']),
                             brand: findCol(row, ['brand', 'merek']),
-                            order_number: findCol(row, ['order number', 'no order', 'nomor order', 'order_no']) || `ORD-${Date.now()}-${idx}`,
+                            order_number: order_number || `ORD-${Date.now()}-${idx}`,
                             item_code: findCol(row, ['item code', 'kode barang', 'kode item']),
-                            item_description: findCol(row, ['item description', 'deskripsi', 'nama barang', 'item']),
-                            qty: parseNum(findCol(row, ['uty', 'qty', 'quantity', 'jumlah'])),
+                            item_description: item_description || '-',
+                            qty: qty,
                             uom: findCol(row, ['uom', 'satuan']),
                             lot_number: findCol(row, ['lot number', 'lot no', 'lot']),
                             hna: parseNum(findCol(row, ['hna'])),
@@ -727,7 +783,7 @@
                             diskon_distribution: parseNum(findCol(row, ['diskon distribution'])),
                             diskon_distribution_rp: parseNum(findCol(row, ['diskon distribution (rp)', 'diskon distribution rp'])),
                             harga_jual: parseNum(findCol(row, ['harga jual'])),
-                            total_harga: parseNum(findCol(row, ['total harga', 'total', 'grand total'])),
+                            total_harga: total_harga,
                             cugs_unit: parseNum(findCol(row, ['cugsiunit', 'cugs/unit', 'cugs unit'])),
                             cugs_total: parseNum(findCol(row, ['cugs total'])),
                             profit: parseNum(findCol(row, ['profit', 'keuntungan'])),
@@ -735,9 +791,14 @@
                             masa_jatuh_tempo: findCol(row, ['masa jatuh', 'masa jatuh tempo', 'jatuh tempo']),
                             status_print: 'Belum Diprint',
                             status: 'Pending',
-                            notes: 'Direct import dari Excel'
-                        };
+                            notes: 'Import Excel'
+                        });
                     });
+
+                    if (parsedItems.length === 0) {
+                        alert('Tidak ada baris data valid yang ditemukan dalam file Excel.');
+                        return;
+                    }
 
                     if (isSupabaseActive && supabaseClient) {
                         showToast(`Mengunggah ${parsedItems.length} data ke Supabase...`);
@@ -770,10 +831,16 @@
             event.target.value = '';
         }
 
+        // SMART COLUMN FINDER (STRIPS MULTI-LINE BREAKS & CLEAN MATCHES)
         function findCol(rowObj, candidates) {
             const keys = Object.keys(rowObj);
             for (const cand of candidates) {
-                const match = keys.find(k => k.toString().toLowerCase().trim() === cand.toLowerCase());
+                const match = keys.find(k => {
+                    const normK = k.toString().replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+                    const normCand = cand.toLowerCase();
+                    return normK === normCand || normK.startsWith(normCand) || normK.includes(normCand);
+                });
+
                 if (match && rowObj[match] !== undefined && rowObj[match] !== null && rowObj[match] !== '') {
                     return rowObj[match].toString().trim();
                 }
@@ -799,7 +866,7 @@
         }
 
         async function toggleStatusPrint(id) {
-            const item = trackerData.find(d => d.id === id);
+            const item = trackerData.find(d => d.id.toString() === id.toString());
             if (!item) return;
 
             const nextStatus = item.status_print === 'Sudah Diprint' ? 'Belum Diprint' : 'Sudah Diprint';
@@ -1028,7 +1095,7 @@
                     if (idx !== -1) trackerData[idx] = { ...trackerData[idx], ...payload };
                     showToast('Data berhasil diperbarui');
                 } else {
-                    trackerData.unshift({ id: Date.now() + Math.random(), ...payload });
+                    trackerData.unshift({ id: `MANUAL-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, ...payload });
                     showToast('Data berhasil ditambahkan');
                 }
                 await saveLocalToStorage();
