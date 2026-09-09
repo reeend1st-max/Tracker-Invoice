@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order & Invoice Tracker - Impor Excel Direct</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS (XLSX Reader) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+    <!-- Header Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                
+                <!-- Logo & Badge -->
+                <div class="flex items-center gap-3">
+                    <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-sm">
+                        <i data-lucide="file-spreadsheet" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg font-bold text-slate-900 leading-none">Order & Invoice Tracker</h1>
+                            <span id="connectionBadge" onclick="openConfigModal()" class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition" title="Klik untuk atur Supabase">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span id="badgeText">Lokal</span>
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">Sistem Tracking Order, Invoice & Status Print Excel</p>
+                    </div>
+                </div>
+
+                <!-- Action Header Buttons -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <button onclick="openConfigModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition" title="Seting Database Supabase">
+                        <i data-lucide="database" class="w-4 h-4 text-slate-600"></i>
+                        <span class="hidden md:inline">Supabase Cloud</span>
+                    </button>
+
+                    <!-- Impor Excel Direct Button -->
+                    <label class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg cursor-pointer transition shadow-sm" title="Unggah File Excel Asli Anda">
+                        <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                        <span>Impor Excel</span>
+                        <input type="file" id="excelImportFile" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelOrCSV(event)">
+                    </label>
+
+                    <button onclick="exportToCSV()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm">
+                        <i data-lucide="download" class="w-4 h-4 text-slate-500"></i>
+                        <span class="hidden sm:inline">Ekspor CSV</span>
+                    </button>
+
+                    <button onclick="openModal()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition shadow-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Tambah Data</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+        <!-- Banner Panduan Impor -->
+        <div id="excelBanner" class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-2xl p-5 mb-6 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                    <i data-lucide="file-spreadsheet" class="w-7 h-7 text-white"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">Sudah Mendukung 29 Kolom Excel Anda!</h3>
+                    <p class="text-xs text-emerald-50 mt-1 max-w-2xl leading-relaxed">
+                        Cukup upload file Excel data order Anda (.xlsx / .xls). Aplikasi secara otomatis membaca kolom 
+                        <span class="underline decoration-emerald-200">Entity, Business Unit, Transaksi, Invoice, Pelanggan, Principal, Item Description, Qty, Harga, Kota, dll</span>.
+                    </p>
+                </div>
+            </div>
+            <label class="whitespace-nowrap px-4 py-2 bg-white text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl cursor-pointer transition shadow-lg flex items-center gap-2">
+                <i data-lucide="file-up" class="w-4 h-4"></i>
+                Pilih File Excel
+                <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelOrCSV(event)">
+            </label>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                    <i data-lucide="layers" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Total Record Excel</p>
+                    <p class="text-xl font-bold text-slate-900" id="statTotal">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-amber-50 text-amber-600 rounded-lg">
+                    <i data-lucide="printer-x" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Belum Diprint</p>
+                    <p class="text-xl font-bold text-amber-600" id="statUnprinted">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+                    <i data-lucide="printer-check" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Sudah Diprint</p>
+                    <p class="text-xl font-bold text-emerald-600" id="statPrinted">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg">
+                    <i data-lucide="banknote" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Total Nominal (Rp)</p>
+                    <p class="text-base sm:text-lg font-bold text-slate-900 truncate" id="statTotalAmount">Rp 0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div class="relative w-full md:w-96">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="searchInput" oninput="renderTable()" placeholder="Cari No Order, Invoice, Pelanggan, Item, Kota..." 
+                       class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+            </div>
+
+            <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                <span class="text-xs font-medium text-slate-500 whitespace-nowrap">Filter Print:</span>
+                <select id="printFilter" onchange="renderTable()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <option value="ALL">Semua Status Print</option>
+                    <option value="Belum Diprint">Belum Diprint</option>
+                    <option value="Sudah Diprint">Sudah Diprint</option>
+                </select>
+
+                <span class="text-xs font-medium text-slate-500 whitespace-nowrap ml-2">Status Order:</span>
+                <select id="statusFilter" onchange="renderTable()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    <option value="ALL">Semua Status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Diproses">Diproses</option>
+                    <option value="Dikirim">Dikirim</option>
+                    <option value="Lunas">Lunas</option>
+                    <option value="Selesai">Selesai</option>
+                </select>
+
+                <button onclick="loadData()" title="Refresh Data" class="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition ml-1">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Data Table -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left text-xs sm:text-sm text-slate-600">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <tr>
+                            <th class="px-4 py-3">No. Order</th>
+                            <th class="px-4 py-3">No. Invoice</th>
+                            <th class="px-4 py-3">Nama Pelanggan</th>
+                            <th class="px-4 py-3">Deskripsi Barang</th>
+                            <th class="px-4 py-3 text-center">Qty / UOM</th>
+                            <th class="px-4 py-3">Total Harga</th>
+                            <th class="px-4 py-3">Kota</th>
+                            <th class="px-4 py-3 text-center">Status Print</th>
+                            <th class="px-4 py-3 text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trackerTableBody" class="divide-y divide-slate-100">
+                        <!-- Data rows injected dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loadingState" class="py-12 text-center hidden">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent mb-2"></div>
+                <p class="text-xs text-slate-500">Memuat data Excel...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden py-12 text-center">
+                <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="inbox" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-slate-800 font-semibold mb-1">Belum ada data Excel terdaftar</h3>
+                <p class="text-xs text-slate-500 max-w-sm mx-auto mb-4">Unggah file Excel Anda dengan mengeklik tombol "Impor Excel" di kanan atas.</p>
+                <label class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg cursor-pointer transition shadow-sm">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span>Upload File Excel Sekarang</span>
+                    <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcelOrCSV(event)">
+                </label>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL DETAIL LENGKAP 29 KOLOM EXCEL -->
+    <div id="detailModalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 bg-indigo-600 text-white rounded-lg">
+                        <i data-lucide="file-text" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900" id="detailModalTitle">Rincian Order & Invoice Excel</h2>
+                        <p class="text-xs text-slate-500" id="detailModalSubtitle">Detail lengkap 29 atribut transaksi</p>
+                    </div>
+                </div>
+                <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1 text-xs sm:text-sm" id="detailModalBody">
+                <!-- Injected via JavaScript -->
+            </div>
+
+            <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+                <span id="detailStatusPrintBadge"></span>
+                <button onclick="closeDetailModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition">
+                    Tutup Modal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Form (Tambah / Edit Manual) -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="text-base font-semibold text-slate-900" id="modalTitle">Tambah / Edit Order</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="trackerForm" onsubmit="saveData(event)" class="p-6 overflow-y-auto custom-scrollbar space-y-4 text-xs sm:text-sm">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Order Number <span class="text-rose-500">*</span></label>
+                        <input type="text" id="formOrderNumber" required placeholder="KY74DY-8596"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">No Invoice <span class="text-rose-500">*</span></label>
+                        <input type="text" id="formNoInvoice" required placeholder="71"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Nama Pelanggan <span class="text-rose-500">*</span></label>
+                        <input type="text" id="formNamaPelanggan" required placeholder="PT Guna Nalar Insan"
+                               class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Order Date</label>
+                        <input type="date" id="formOrderDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Accounting Date</label>
+                        <input type="date" id="formAccountingDate" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Principal</label>
+                        <input type="text" id="formPrincipal" placeholder="PPIC Soho Pharmasi" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-2">
+                        <label class="block font-semibold text-slate-700 mb-1">Item Description</label>
+                        <input type="text" id="formItemDescription" placeholder="IMBOOST 5 CATCH COVER..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Item Code</label>
+                        <input type="text" id="formItemCode" placeholder="17490" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Qty</label>
+                        <input type="number" id="formQty" min="0" placeholder="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">UOM</label>
+                        <input type="text" id="formUom" placeholder="BOX / BTL" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Total Harga (Rp)</label>
+                        <input type="number" id="formTotalHarga" min="0" placeholder="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Kota Alamat</label>
+                        <input type="text" id="formKotaAlamat" placeholder="Denpasar" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Status Print</label>
+                        <select id="formStatusPrint" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+                            <option value="Belum Diprint">Belum Diprint</option>
+                            <option value="Sudah Diprint">Sudah Diprint</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Status Order</label>
+                        <select id="formStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="Pending">Pending</option>
+                            <option value="Diproses">Diproses</option>
+                            <option value="Dikirim">Dikirim</option>
+                            <option value="Lunas">Lunas</option>
+                            <option value="Selesai">Selesai</option>
+                            <option value="Batal">Batal</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
+                    <button type="submit" id="saveBtn" class="px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Config Supabase -->
+    <div id="configModalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="database" class="w-5 h-5 text-indigo-600"></i>
+                    <h2 class="text-base font-semibold text-slate-900">Koneksi Supabase Cloud</h2>
+                </div>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="saveSupabaseConfig(event)" class="p-6 space-y-4 text-xs sm:text-sm">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Supabase URL</label>
+                    <input type="url" id="cfgUrl" placeholder="https://xyz.supabase.co" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Supabase Anon Key</label>
+                    <input type="password" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIsIn..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                    <button type="button" onclick="clearSupabaseConfig()" class="text-xs text-rose-600 hover:underline">Hapus Koneksi</button>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeConfigModal()" class="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
+                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm">Simpan</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl border border-slate-700 flex items-center gap-3 transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400" id="toastIcon"></i>
+        <span class="text-xs sm:text-sm font-medium" id="toastMessage">Berhasil disimpan</span>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const STORAGE_KEY = 'ORDER_INVOICE_EXCEL_DATA_V2';
+        const CFG_KEY = 'SUPABASE_CONFIG_DATA';
+
+        let trackerData = [];
+        let supabaseClient = null;
+        let isSupabaseActive = false;
+
+        // Sample Data Matching Excel Format
+        const defaultData = [
+            {
+                id: 1,
+                entity: 'MBI',
+                business_unit: 'MBI Business Unit',
+                jenis_transaksi: 'TRADE_3RD PARTY',
+                nama_pelanggan: 'PT Guna Nalar Insan',
+                no_invoice: '71',
+                order_date: '2026-09-07',
+                accounting_date: '2026-09-01',
+                nama_kategori: 'PPIC Regular',
+                principal: 'PPIC Soho Industri Pharmasi',
+                brand: '',
+                order_number: 'KY74DY-8596',
+                item_code: '17490',
+                item_description: 'IMBOOST 5 CATCH COVER @ 4 TABLET -',
+                qty: 50,
+                uom: 'BOX',
+                lot_number: '26S0103',
+                hna: 40000,
+                diskon_pct: 3,
+                diskon_principal: 0,
+                diskon_principal_rp: 0,
+                diskon_distribution: 3,
+                diskon_distribution_rp: 2208000,
+                harga_jual: 44160,
+                total_harga: 2208000,
+                cugs_unit: 0,
+                cugs_total: 0,
+                profit: 0,
+                kota_alamat: 'Denpasar',
+                masa_jatuh_tempo: '20',
+                status_print: 'Belum Diprint',
+                status: 'Pending',
+                notes: 'Order Imboost via Excel'
+            },
+            {
+                id: 2,
+                entity: 'MBI',
+                business_unit: 'MBI Business Unit',
+                jenis_transaksi: 'TRADE_3RD PARTY',
+                nama_pelanggan: 'Apotek Gama 2',
+                no_invoice: '70',
+                order_date: '2026-09-07',
+                accounting_date: '2026-09-01',
+                nama_kategori: 'PPIC Regular',
+                principal: 'PPIC Cendo Pharmaceutical',
+                brand: '',
+                order_number: 'ZLGMXL-8003',
+                item_code: '9241',
+                item_description: 'CENDO LYTEERS EYE DROPS 15ML - CENDO',
+                qty: 30,
+                uom: 'BTL',
+                lot_number: '6L01062',
+                hna: 105000,
+                diskon_pct: 13.5,
+                diskon_principal: 0,
+                diskon_principal_rp: 0,
+                diskon_distribution: 13.5,
+                diskon_distribution_rp: 3189375,
+                harga_jual: 106312,
+                total_harga: 3189375,
+                cugs_unit: 0,
+                cugs_total: 0,
+                profit: 0,
+                kota_alamat: 'Cilegon',
+                masa_jatuh_tempo: '20',
+                status_print: 'Belum Diprint',
+                status: 'Diproses',
+                notes: 'Pengiriman area Cilegon'
+            },
+            {
+                id: 3,
+                entity: 'MBI',
+                business_unit: 'MBI Business Unit',
+                jenis_transaksi: 'TRADE_3RD PARTY',
+                nama_pelanggan: 'Apotek Gama 2',
+                no_invoice: '70',
+                order_date: '2026-09-07',
+                accounting_date: '2026-09-01',
+                nama_kategori: 'PPIC Regular',
+                principal: 'PPIC Eagle Indo Pharma',
+                brand: '',
+                order_number: 'ZLGMXL-8003',
+                item_code: '9658',
+                item_description: 'CAP LANG MINYAK KAYU PUTIH 60 ML - EAGLE INDO PHARMA',
+                qty: 100,
+                uom: 'BTL',
+                lot_number: 'HC01216',
+                hna: 95485,
+                diskon_pct: 0.5,
+                diskon_principal: 0,
+                diskon_principal_rp: 0,
+                diskon_distribution: 0.5,
+                diskon_distribution_rp: 9548500,
+                harga_jual: 95485,
+                total_harga: 9548500,
+                cugs_unit: 0,
+                cugs_total: 0,
+                profit: 0,
+                kota_alamat: 'Cilegon',
+                masa_jatuh_tempo: '20',
+                status_print: 'Sudah Diprint',
+                status: 'Selesai',
+                notes: 'Telah dicetak dan dikirim'
+            }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initSupabase();
+            loadData();
+            document.getElementById('formOrderDate').valueAsDate = new Date();
+            lucide.createIcons();
+        });
+
+        function initSupabase() {
+            const rawCfg = localStorage.getItem(CFG_KEY);
+            if (rawCfg) {
+                try {
+                    const cfg = JSON.parse(rawCfg);
+                    if (cfg.url && cfg.key) {
+                        supabaseClient = window.supabase.createClient(cfg.url, cfg.key);
+                        isSupabaseActive = true;
+                        updateBadge(true);
+                        return;
+                    }
+                } catch (e) {}
+            }
+            isSupabaseActive = false;
+            updateBadge(false);
+        }
+
+        function updateBadge(active) {
+            const badge = document.getElementById('connectionBadge');
+            if (active) {
+                badge.className = "cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:opacity-80 transition";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Supabase Cloud</span>`;
+            } else {
+                badge.className = "cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>Local Storage</span>`;
+            }
+        }
+
+        async function loadData() {
+            showLoading(true);
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('orders').select('*').order('id', { ascending: false });
+                    if (error) throw error;
+                    trackerData = (data || []).map(d => ({
+                        id: d.id,
+                        entity: d.entity || '',
+                        business_unit: d.business_unit || '',
+                        jenis_transaksi: d.jenis_transaksi || '',
+                        nama_pelanggan: d.nama_pelanggan || '',
+                        no_invoice: d.no_invoice || '',
+                        order_date: d.order_date || '',
+                        accounting_date: d.accounting_date || '',
+                        nama_kategori: d.nama_kategori || '',
+                        principal: d.principal || '',
+                        brand: d.brand || '',
+                        order_number: d.order_number || '',
+                        item_code: d.item_code || '',
+                        item_description: d.item_description || '',
+                        qty: d.qty || 0,
+                        uom: d.uom || '',
+                        lot_number: d.lot_number || '',
+                        hna: d.hna || 0,
+                        diskon_pct: d.diskon_pct || 0,
+                        diskon_principal: d.diskon_principal || 0,
+                        diskon_principal_rp: d.diskon_principal_rp || 0,
+                        diskon_distribution: d.diskon_distribution || 0,
+                        diskon_distribution_rp: d.diskon_distribution_rp || 0,
+                        harga_jual: d.harga_jual || 0,
+                        total_harga: d.total_harga || 0,
+                        cugs_unit: d.cugs_unit || 0,
+                        cugs_total: d.cugs_total || 0,
+                        profit: d.profit || 0,
+                        kota_alamat: d.kota_alamat || '',
+                        masa_jatuh_tempo: d.masa_jatuh_tempo || '',
+                        status_print: d.status_print || 'Belum Diprint',
+                        status: d.status || 'Pending',
+                        notes: d.notes || ''
+                    }));
+                } catch (err) {
+                    showToast('Gagal memuat data dari Supabase. Menggunakan penyimpanan lokal.', true);
+                    loadLocalData();
+                }
+            } else {
+                loadLocalData();
+            }
+
+            showLoading(false);
+            renderTable();
+        }
+
+        function loadLocalData() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                try { trackerData = JSON.parse(raw); } catch (e) { trackerData = [...defaultData]; }
+            } else {
+                trackerData = [...defaultData];
+                saveLocalToStorage();
+            }
+        }
+
+        function saveLocalToStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData));
+        }
+
+        // SMART EXCEL & CSV IMPORTER FOR ALL 29 COLUMNS
+        async function importExcelOrCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showToast('Membaca file Excel...', false);
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+                    if (!rawRows || rawRows.length === 0) {
+                        alert('File Excel kosong atau tidak berisi data.');
+                        return;
+                    }
+
+                    const parsedItems = rawRows.map((row, idx) => {
+                        return {
+                            entity: findCol(row, ['entity', 'entitas']),
+                            business_unit: findCol(row, ['business & unit', 'business unit', 'unit']),
+                            jenis_transaksi: findCol(row, ['jenis transaksi', 'jenis transaks', 'transaksi']),
+                            nama_pelanggan: findCol(row, ['nama pelanggan', 'pelanggan', 'customer']),
+                            no_invoice: findCol(row, ['no invoice', 'invoice', 'no. invoice', 'inv']),
+                            order_date: normalizeDate(findCol(row, ['order date', 'tanggal order', 'tgl order', 'order_date'])),
+                            accounting_date: normalizeDate(findCol(row, ['accounting date', 'tgl accounting', 'accounting_date'])),
+                            nama_kategori: findCol(row, ['nama kategori', 'kategori']),
+                            principal: findCol(row, ['principal']),
+                            brand: findCol(row, ['brand', 'merek']),
+                            order_number: findCol(row, ['order number', 'no order', 'nomor order', 'order_no']) || `ORD-${Date.now()}-${idx}`,
+                            item_code: findCol(row, ['item code', 'kode barang', 'kode item']),
+                            item_description: findCol(row, ['item description', 'deskripsi', 'nama barang', 'item']),
+                            qty: parseNum(findCol(row, ['uty', 'qty', 'quantity', 'jumlah'])),
+                            uom: findCol(row, ['uom', 'satuan']),
+                            lot_number: findCol(row, ['lot number', 'lot no', 'lot']),
+                            hna: parseNum(findCol(row, ['hna'])),
+                            diskon_pct: parseNum(findCol(row, ['diskon %', 'diskon pct', 'diskon'])),
+                            diskon_principal: parseNum(findCol(row, ['diskon principal'])),
+                            diskon_principal_rp: parseNum(findCol(row, ['diskon principal (rp)', 'diskon principal rp'])),
+                            diskon_distribution: parseNum(findCol(row, ['diskon distribution'])),
+                            diskon_distribution_rp: parseNum(findCol(row, ['diskon distribution (rp)', 'diskon distribution rp'])),
+                            harga_jual: parseNum(findCol(row, ['harga jual'])),
+                            total_harga: parseNum(findCol(row, ['total harga', 'total', 'grand total'])),
+                            cugs_unit: parseNum(findCol(row, ['cugsiunit', 'cugs/unit', 'cugs unit'])),
+                            cugs_total: parseNum(findCol(row, ['cugs total'])),
+                            profit: parseNum(findCol(row, ['profit', 'keuntungan'])),
+                            kota_alamat: findCol(row, ['kota alamat', 'kota', 'alamat']),
+                            masa_jatuh_tempo: findCol(row, ['masa jatuh', 'masa jatuh tempo', 'jatuh tempo']),
+                            status_print: 'Belum Diprint',
+                            status: 'Pending',
+                            notes: 'Direct import dari Excel'
+                        };
+                    });
+
+                    if (isSupabaseActive && supabaseClient) {
+                        showToast(`Mengunggah ${parsedItems.length} data ke Supabase...`);
+                        const { error } = await supabaseClient.from('orders').insert(parsedItems);
+                        if (error) throw error;
+                        showToast(`Berhasil mengimpor ${parsedItems.length} baris ke Supabase!`);
+                    } else {
+                        parsedItems.reverse().forEach(item => {
+                            trackerData.unshift({ id: Date.now() + Math.random(), ...item });
+                        });
+                        saveLocalToStorage();
+                        showToast(`Berhasil mengimpor ${parsedItems.length} baris dari Excel!`);
+                    }
+
+                    loadData();
+                } catch (err) {
+                    console.error(err);
+                    alert('Gagal memproses file Excel: ' + err.message);
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        function findCol(rowObj, candidates) {
+            const keys = Object.keys(rowObj);
+            for (const cand of candidates) {
+                const match = keys.find(k => k.toString().toLowerCase().trim() === cand.toLowerCase());
+                if (match && rowObj[match] !== undefined && rowObj[match] !== null && rowObj[match] !== '') {
+                    return rowObj[match].toString().trim();
+                }
+            }
+            return '';
+        }
+
+        function normalizeDate(val) {
+            if (!val) return '';
+            if (typeof val === 'number') {
+                const jsDate = new Date(Math.round((val - 25569) * 86400 * 1000));
+                return jsDate.toISOString().slice(0, 10);
+            }
+            const parsed = new Date(val);
+            if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+            return val;
+        }
+
+        function parseNum(val) {
+            if (!val) return 0;
+            const cleaned = val.toString().replace(/[^0-9.-]+/g, '');
+            return parseFloat(cleaned) || 0;
+        }
+
+        async function toggleStatusPrint(id) {
+            const item = trackerData.find(d => d.id === id);
+            if (!item) return;
+
+            const nextStatus = item.status_print === 'Sudah Diprint' ? 'Belum Diprint' : 'Sudah Diprint';
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const { error } = await supabaseClient.from('orders').update({ status_print: nextStatus }).eq('id', id);
+                    if (error) throw error;
+                    item.status_print = nextStatus;
+                    showToast(`Status print diubah ke "${nextStatus}"`);
+                } catch (e) {
+                    showToast('Gagal mengubah status print di Supabase', true);
+                }
+            } else {
+                item.status_print = nextStatus;
+                saveLocalToStorage();
+                showToast(`Status print diubah ke "${nextStatus}"`);
+            }
+            renderTable();
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').innerText = trackerData.length;
+            document.getElementById('statUnprinted').innerText = trackerData.filter(d => d.status_print === 'Belum Diprint').length;
+            document.getElementById('statPrinted').innerText = trackerData.filter(d => d.status_print === 'Sudah Diprint').length;
+
+            const sumAmount = trackerData.reduce((acc, curr) => acc + (curr.total_harga || 0), 0);
+            document.getElementById('statTotalAmount').innerText = formatRupiah(sumAmount);
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('trackerTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const printFilter = document.getElementById('printFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            const filtered = trackerData.filter(item => {
+                const matchQuery = (item.order_number || '').toLowerCase().includes(query) ||
+                                   (item.no_invoice || '').toLowerCase().includes(query) ||
+                                   (item.nama_pelanggan || '').toLowerCase().includes(query) ||
+                                   (item.item_description || '').toLowerCase().includes(query) ||
+                                   (item.kota_alamat || '').toLowerCase().includes(query) ||
+                                   (item.principal || '').toLowerCase().includes(query);
+
+                const matchPrint = printFilter === 'ALL' || item.status_print === printFilter;
+                const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
+                return matchQuery && matchPrint && matchStatus;
+            });
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+
+                filtered.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition border-b border-slate-100';
+
+                    const printBadgeClass = item.status_print === 'Sudah Diprint' 
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200' 
+                        : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200';
+
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">${escapeHtml(item.order_number)}</td>
+                        <td class="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">${escapeHtml(item.no_invoice)}</td>
+                        <td class="px-4 py-3 text-slate-900 font-medium">${escapeHtml(item.nama_pelanggan)}</td>
+                        <td class="px-4 py-3 text-slate-700 max-w-xs truncate" title="${escapeHtml(item.item_description)}">
+                            ${escapeHtml(item.item_description || '-')}
+                            ${item.item_code ? `<span class="block text-[10px] text-slate-400">Kode: ${escapeHtml(item.item_code)}</span>` : ''}
+                        </td>
+                        <td class="px-4 py-3 text-center font-semibold text-slate-700 whitespace-nowrap">${item.qty || 0} ${escapeHtml(item.uom || '')}</td>
+                        <td class="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">${formatRupiah(item.total_harga)}</td>
+                        <td class="px-4 py-3 text-slate-600 whitespace-nowrap">${escapeHtml(item.kota_alamat || '-')}</td>
+                        <td class="px-4 py-3 text-center whitespace-nowrap">
+                            <button onclick="toggleStatusPrint(${item.id})" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${printBadgeClass} transition shadow-xs" title="Klik untuk ubah status print">
+                                <i data-lucide="${item.status_print === 'Sudah Diprint' ? 'check' : 'printer'}" class="w-3.5 h-3.5"></i>
+                                <span>${item.status_print}</span>
+                            </button>
+                        </td>
+                        <td class="px-4 py-3 text-right whitespace-nowrap">
+                            <div class="flex items-center justify-end gap-1">
+                                <button onclick="showDetail(${item.id})" class="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition" title="Lihat Detail 29 Kolom">
+                                    Detail
+                                </button>
+                                <button onclick="editData(${item.id})" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
+                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="deleteData(${item.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition" title="Hapus">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            updateStats();
+            lucide.createIcons();
+        }
+
+        function showDetail(id) {
+            const item = trackerData.find(d => d.id === id);
+            if (!item) return;
+
+            document.getElementById('detailModalTitle').innerText = `Order: ${item.order_number || '-'}`;
+            document.getElementById('detailModalSubtitle').innerText = `Invoice No: ${item.no_invoice || '-'} | Pelanggan: ${item.nama_pelanggan || '-'}`;
+
+            const printBadge = item.status_print === 'Sudah Diprint'
+                ? `<span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold border border-emerald-300">✔ Sudah Diprint</span>`
+                : `<span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold border border-amber-300">🖨 Belum Diprint</span>`;
+            document.getElementById('detailStatusPrintBadge').innerHTML = printBadge;
+
+            const gridHtml = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <!-- Blok 1: Transaksi & Pelanggan -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                        <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider text-indigo-600 border-b border-slate-200 pb-1 mb-2">Informasi Transaksi & Pelanggan</h4>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><span class="text-slate-400 block text-[11px]">Entity:</span><span class="font-semibold text-slate-800">${escapeHtml(item.entity || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Business Unit:</span><span class="font-semibold text-slate-800">${escapeHtml(item.business_unit || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Jenis Transaksi:</span><span class="font-semibold text-slate-800">${escapeHtml(item.jenis_transaksi || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Nama Pelanggan:</span><span class="font-semibold text-slate-800">${escapeHtml(item.nama_pelanggan || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">No Invoice:</span><span class="font-semibold text-indigo-600">${escapeHtml(item.no_invoice || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Order Number:</span><span class="font-semibold text-indigo-600">${escapeHtml(item.order_number || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Order Date:</span><span class="font-semibold text-slate-800">${item.order_date || '-'}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Accounting Date:</span><span class="font-semibold text-slate-800">${item.accounting_date || '-'}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Nama Kategori:</span><span class="font-semibold text-slate-800">${escapeHtml(item.nama_kategori || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Principal:</span><span class="font-semibold text-slate-800">${escapeHtml(item.principal || '-')}</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Blok 2: Rincian Produk & Stok -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                        <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider text-indigo-600 border-b border-slate-200 pb-1 mb-2">Detail Produk & Stok</h4>
+                        <div class="space-y-2">
+                            <div><span class="text-slate-400 block text-[11px]">Item Description:</span><span class="font-bold text-slate-900 leading-snug">${escapeHtml(item.item_description || '-')}</span></div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><span class="text-slate-400 block text-[11px]">Item Code:</span><span class="font-semibold text-slate-800">${escapeHtml(item.item_code || '-')}</span></div>
+                                <div><span class="text-slate-400 block text-[11px]">Qty / UOM:</span><span class="font-bold text-slate-900">${item.qty || 0} ${escapeHtml(item.uom || '')}</span></div>
+                                <div><span class="text-slate-400 block text-[11px]">LOT Number:</span><span class="font-semibold text-slate-800">${escapeHtml(item.lot_number || '-')}</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Blok 3: Keuangan, Diskon & Profit -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 md:col-span-2">
+                        <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider text-indigo-600 border-b border-slate-200 pb-1 mb-2">Nilai Transaksi & Diskon</h4>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div><span class="text-slate-400 block text-[11px]">HNA:</span><span class="font-semibold text-slate-800">${formatRupiah(item.hna)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Diskon %:</span><span class="font-semibold text-slate-800">${item.diskon_pct || 0}%</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Diskon Principal (Rp):</span><span class="font-semibold text-slate-800">${formatRupiah(item.diskon_principal_rp)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Diskon Distribution (Rp):</span><span class="font-semibold text-slate-800">${formatRupiah(item.diskon_distribution_rp)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Harga Jual:</span><span class="font-semibold text-slate-800">${formatRupiah(item.harga_jual)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Total Harga:</span><span class="font-bold text-emerald-600 text-base">${formatRupiah(item.total_harga)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">CUGS Total:</span><span class="font-semibold text-slate-800">${formatRupiah(item.cugs_total)}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Profit:</span><span class="font-bold text-indigo-600">${formatRupiah(item.profit)}</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Blok 4: Lokasi, Tempo & Catatan -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 md:col-span-2">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div><span class="text-slate-400 block text-[11px]">Kota Alamat:</span><span class="font-semibold text-slate-800">${escapeHtml(item.kota_alamat || '-')}</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Masa Jatuh Tempo:</span><span class="font-semibold text-slate-800">${escapeHtml(item.masa_jatuh_tempo || '-')} Hari</span></div>
+                            <div><span class="text-slate-400 block text-[11px]">Catatan / Resi:</span><span class="font-semibold text-slate-800">${escapeHtml(item.notes || '-')}</span></div>
+                        </div>
+                    </div>
+
+                </div>
+            `;
+
+            document.getElementById('detailModalBody').innerHTML = gridHtml;
+            document.getElementById('detailModalOverlay').classList.remove('hidden');
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModalOverlay').classList.add('hidden');
+        }
+
+        async function saveData(e) {
+            e.preventDefault();
+            const editId = parseInt(document.getElementById('editIndex').value);
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerText = 'Menyimpan...';
+
+            const payload = {
+                order_number: document.getElementById('formOrderNumber').value.trim(),
+                no_invoice: document.getElementById('formNoInvoice').value.trim(),
+                nama_pelanggan: document.getElementById('formNamaPelanggan').value.trim(),
+                order_date: document.getElementById('formOrderDate').value,
+                accounting_date: document.getElementById('formAccountingDate').value,
+                principal: document.getElementById('formPrincipal').value.trim(),
+                item_description: document.getElementById('formItemDescription').value.trim(),
+                item_code: document.getElementById('formItemCode').value.trim(),
+                qty: parseFloat(document.getElementById('formQty').value) || 0,
+                uom: document.getElementById('formUom').value.trim(),
+                total_harga: parseFloat(document.getElementById('formTotalHarga').value) || 0,
+                kota_alamat: document.getElementById('formKotaAlamat').value.trim(),
+                status_print: document.getElementById('formStatusPrint').value,
+                status: document.getElementById('formStatus').value
+            };
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    if (editId !== -1) {
+                        const { error } = await supabaseClient.from('orders').update(payload).eq('id', editId);
+                        if (error) throw error;
+                        showToast('Data diperbarui di Supabase');
+                    } else {
+                        const { error } = await supabaseClient.from('orders').insert([payload]);
+                        if (error) throw error;
+                        showToast('Data tersimpan di Supabase');
+                    }
+                } catch (err) {
+                    showToast('Gagal menyimpan ke Supabase', true);
+                }
+            } else {
+                if (editId !== -1) {
+                    const idx = trackerData.findIndex(d => d.id === editId);
+                    if (idx !== -1) trackerData[idx] = { ...trackerData[idx], ...payload };
+                    showToast('Data berhasil diperbarui');
+                } else {
+                    trackerData.unshift({ id: Date.now(), ...payload });
+                    showToast('Data berhasil ditambahkan');
+                }
+                saveLocalToStorage();
+            }
+
+            saveBtn.disabled = false;
+            saveBtn.innerText = 'Simpan';
+            closeModal();
+            loadData();
+        }
+
+        async function deleteData(id) {
+            if (!confirm('Apakah Anda yakin ingin menghapus baris ini?')) return;
+
+            if (isSupabaseActive && supabaseClient) {
+                try {
+                    const { error } = await supabaseClient.from('orders').delete().eq('id', id);
+                    if (error) throw error;
+                    showToast('Data terhapus dari Supabase');
+                } catch (e) {
+                    showToast('Gagal menghapus dari Supabase', true);
+                }
+            } else {
+                trackerData = trackerData.filter(d => d.id !== id);
+                saveLocalToStorage();
+                showToast('Data berhasil dihapus');
+            }
+            loadData();
+        }
+
+        function openModal(isEdit = false) {
+            document.getElementById('modalTitle').innerText = isEdit ? 'Edit Order Excel' : 'Tambah Order Manual';
+            if (!isEdit) {
+                document.getElementById('trackerForm').reset();
+                document.getElementById('editIndex').value = '-1';
+                document.getElementById('formOrderDate').valueAsDate = new Date();
+            }
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
+
+        function editData(id) {
+            const item = trackerData.find(d => d.id === id);
+            if (!item) return;
+
+            document.getElementById('editIndex').value = item.id;
+            document.getElementById('formOrderNumber').value = item.order_number || '';
+            document.getElementById('formNoInvoice').value = item.no_invoice || '';
+            document.getElementById('formNamaPelanggan').value = item.nama_pelanggan || '';
+            document.getElementById('formOrderDate').value = item.order_date || '';
+            document.getElementById('formAccountingDate').value = item.accounting_date || '';
+            document.getElementById('formPrincipal').value = item.principal || '';
+            document.getElementById('formItemDescription').value = item.item_description || '';
+            document.getElementById('formItemCode').value = item.item_code || '';
+            document.getElementById('formQty').value = item.qty || '';
+            document.getElementById('formUom').value = item.uom || '';
+            document.getElementById('formTotalHarga').value = item.total_harga || '';
+            document.getElementById('formKotaAlamat').value = item.kota_alamat || '';
+            document.getElementById('formStatusPrint').value = item.status_print || 'Belum Diprint';
+            document.getElementById('formStatus').value = item.status || 'Pending';
+
+            openModal(true);
+        }
+
+        function openConfigModal() {
+            const raw = localStorage.getItem(CFG_KEY);
+            if (raw) {
+                try {
+                    const cfg = JSON.parse(raw);
+                    document.getElementById('cfgUrl').value = cfg.url || '';
+                    document.getElementById('cfgKey').value = cfg.key || '';
+                } catch(e){}
+            }
+            document.getElementById('configModalOverlay').classList.remove('hidden');
+        }
+
+        function closeConfigModal() { document.getElementById('configModalOverlay').classList.add('hidden'); }
+
+        function saveSupabaseConfig(e) {
+            e.preventDefault();
+            const url = document.getElementById('cfgUrl').value.trim();
+            const key = document.getElementById('cfgKey').value.trim();
+            if (!url || !key) return alert('Harap isi URL dan Key Supabase.');
+            localStorage.setItem(CFG_KEY, JSON.stringify({ url, key }));
+            initSupabase();
+            closeConfigModal();
+            showToast('Koneksi Supabase tersimpan!');
+            loadData();
+        }
+
+        function clearSupabaseConfig() {
+            if (confirm('Hapus koneksi Supabase?')) {
+                localStorage.removeItem(CFG_KEY);
+                supabaseClient = null;
+                initSupabase();
+                closeConfigModal();
+                showToast('Koneksi Supabase dihapus');
+                loadData();
+            }
+        }
+
+        function exportToCSV() {
+            if (trackerData.length === 0) return alert('Tidak ada data untuk diekspor.');
+            const headers = ['Entity', 'Business Unit', 'Jenis Transaksi', 'Nama Pelanggan', 'No Invoice', 'Order Date', 'Accounting Date', 'Nama Kategori', 'Principal', 'Brand', 'Order Number', 'Item Code', 'Item Description', 'Qty', 'UOM', 'LOT Number', 'HNA', 'Diskon %', 'Harga Jual', 'Total Harga', 'Kota Alamat', 'Masa Jatuh Tempo', 'Status Print', 'Status'];
+            const rows = trackerData.map(d => [
+                `"${d.entity || ''}"`, `"${d.business_unit || ''}"`, `"${d.jenis_transaksi || ''}"`, `"${d.nama_pelanggan || ''}"`, `"${d.no_invoice || ''}"`, `"${d.order_date || ''}"`, `"${d.accounting_date || ''}"`, `"${d.nama_kategori || ''}"`, `"${d.principal || ''}"`, `"${d.brand || ''}"`, `"${d.order_number || ''}"`, `"${d.item_code || ''}"`, `"${(d.item_description || '').replace(/"/g, '""')}"`, d.qty || 0, `"${d.uom || ''}"`, `"${d.lot_number || ''}"`, d.hna || 0, d.diskon_pct || 0, d.harga_jual || 0, d.total_harga || 0, `"${d.kota_alamat || ''}"`, `"${d.masa_jatuh_tempo || ''}"`, `"${d.status_print || ''}"`, `"${d.status || ''}"`
+            ]);
+            const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+            const link = document.createElement('a');
+            link.setAttribute('href', encodeURI(csvContent));
+            link.setAttribute('download', `Export_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('Ekspor CSV Berhasil!');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingState').classList.toggle('hidden', !show);
+            document.getElementById('trackerTableBody').classList.toggle('hidden', show);
+        }
+
+        function formatRupiah(num) {
+            if (!num || isNaN(num)) return 'Rp 0';
+            return 'Rp ' + Math.round(num).toLocaleString('id-ID');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.innerText = text || '';
+            return div.innerHTML;
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = msg;
+            toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
