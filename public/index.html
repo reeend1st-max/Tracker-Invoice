@@ -41,7 +41,7 @@
                             <h1 class="text-lg font-bold text-slate-900 leading-none">Order & Invoice Tracker</h1>
                             <span id="connectionBadge" onclick="openConfigModal()" class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition" title="Klik untuk atur Supabase">
                                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                <span id="badgeText">Lokal</span>
+                                <span id="badgeText">Lokal (IndexedDB)</span>
                             </span>
                         </div>
                         <p class="text-xs text-slate-500 mt-0.5">Sistem Tracking Order, Invoice & Status Print Excel</p>
@@ -86,10 +86,10 @@
                     <i data-lucide="file-spreadsheet" class="w-7 h-7 text-white"></i>
                 </div>
                 <div>
-                    <h3 class="text-base font-bold text-white">Sudah Mendukung 29 Kolom Excel Anda!</h3>
+                    <h3 class="text-base font-bold text-white">Sudah Mendukung 29 Kolom Excel & Kapasitas File Besar!</h3>
                     <p class="text-xs text-emerald-50 mt-1 max-w-2xl leading-relaxed">
                         Cukup upload file Excel data order Anda (.xlsx / .xls). Aplikasi secara otomatis membaca kolom 
-                        <span class="underline decoration-emerald-200">Entity, Business Unit, Transaksi, Invoice, Pelanggan, Principal, Item Description, Qty, Harga, Kota, dll</span>.
+                        <span class="underline decoration-emerald-200">Entity, Business Unit, Transaksi, Invoice, Pelanggan, Principal, Item Description, Qty, Harga, Kota, dll</span> dengan dukungan penyimpanan browser berkapasitas besar (IndexedDB).
                     </p>
                 </div>
             </div>
@@ -402,6 +402,25 @@
         const STORAGE_KEY = 'ORDER_INVOICE_EXCEL_DATA_V2';
         const CFG_KEY = 'SUPABASE_CONFIG_DATA';
 
+        // INDEXEDDB DATABASE FOR UNLIMITED LOCAL STORAGE (BYPASS 5MB LOCALSTORAGE QUOTA)
+        const DB_NAME = 'OrderTrackerDB_v2';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'orders';
+
+        function getDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
         let trackerData = [];
         let supabaseClient = null;
         let isSupabaseActive = false;
@@ -515,9 +534,9 @@
             }
         ];
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initSupabase();
-            loadData();
+            await loadData();
             document.getElementById('formOrderDate').valueAsDate = new Date();
             lucide.createIcons();
         });
@@ -546,7 +565,7 @@
                 badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Supabase Cloud</span>`;
             } else {
                 badge.className = "cursor-pointer inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 hover:opacity-80 transition";
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>Local Storage</span>`;
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>Lokal (IndexedDB)</span>`;
             }
         }
 
@@ -594,28 +613,70 @@
                     }));
                 } catch (err) {
                     showToast('Gagal memuat data dari Supabase. Menggunakan penyimpanan lokal.', true);
-                    loadLocalData();
+                    await loadLocalData();
                 }
             } else {
-                loadLocalData();
+                await loadLocalData();
             }
 
             showLoading(false);
             renderTable();
         }
 
-        function loadLocalData() {
+        async function loadLocalData() {
+            try {
+                const db = await getDB();
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const data = await new Promise((res) => {
+                    const req = store.getAll();
+                    req.onsuccess = () => res(req.result || []);
+                    req.onerror = () => res([]);
+                });
+
+                if (data && data.length > 0) {
+                    trackerData = data;
+                    return;
+                }
+            } catch (e) {
+                console.warn('IndexedDB load warning:', e);
+            }
+
+            // Fallback to localStorage safely
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 try { trackerData = JSON.parse(raw); } catch (e) { trackerData = [...defaultData]; }
             } else {
                 trackerData = [...defaultData];
-                saveLocalToStorage();
+                await saveLocalToStorage();
             }
         }
 
-        function saveLocalToStorage() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData));
+        async function saveLocalToStorage() {
+            // 1. Primary: Save to IndexedDB (No 5MB quota limit!)
+            try {
+                const db = await getDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                await new Promise((res, rej) => {
+                    const clearReq = store.clear();
+                    clearReq.onsuccess = () => res();
+                    clearReq.onerror = (err) => rej(err);
+                });
+                
+                for (const item of trackerData) {
+                    store.put(item);
+                }
+            } catch (err) {
+                console.warn('IndexedDB save warning:', err);
+            }
+
+            // 2. Safe localStorage fallback (silently ignore quota exceptions)
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerData.slice(0, 100)));
+            } catch (e) {
+                // Quota exceeded - ignored because IndexedDB stores everything safely
+            }
         }
 
         // SMART EXCEL & CSV IMPORTER FOR ALL 29 COLUMNS
@@ -642,6 +703,7 @@
 
                     const parsedItems = rawRows.map((row, idx) => {
                         return {
+                            id: Date.now() + Math.random(),
                             entity: findCol(row, ['entity', 'entitas']),
                             business_unit: findCol(row, ['business & unit', 'business unit', 'unit']),
                             jenis_transaksi: findCol(row, ['jenis transaksi', 'jenis transaks', 'transaksi']),
@@ -679,18 +741,25 @@
 
                     if (isSupabaseActive && supabaseClient) {
                         showToast(`Mengunggah ${parsedItems.length} data ke Supabase...`);
-                        const { error } = await supabaseClient.from('orders').insert(parsedItems);
-                        if (error) throw error;
+                        const BATCH_SIZE = 250;
+                        for (let i = 0; i < parsedItems.length; i += BATCH_SIZE) {
+                            const chunk = parsedItems.slice(i, i + BATCH_SIZE).map(item => {
+                                const { id, ...dbItem } = item;
+                                return dbItem;
+                            });
+                            const { error } = await supabaseClient.from('orders').insert(chunk);
+                            if (error) throw error;
+                        }
                         showToast(`Berhasil mengimpor ${parsedItems.length} baris ke Supabase!`);
                     } else {
                         parsedItems.reverse().forEach(item => {
-                            trackerData.unshift({ id: Date.now() + Math.random(), ...item });
+                            trackerData.unshift(item);
                         });
-                        saveLocalToStorage();
+                        await saveLocalToStorage();
                         showToast(`Berhasil mengimpor ${parsedItems.length} baris dari Excel!`);
                     }
 
-                    loadData();
+                    await loadData();
                 } catch (err) {
                     console.error(err);
                     alert('Gagal memproses file Excel: ' + err.message);
@@ -746,7 +815,7 @@
                 }
             } else {
                 item.status_print = nextStatus;
-                saveLocalToStorage();
+                await saveLocalToStorage();
                 showToast(`Status print diubah ke "${nextStatus}"`);
             }
             renderTable();
@@ -808,20 +877,20 @@
                         <td class="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">${formatRupiah(item.total_harga)}</td>
                         <td class="px-4 py-3 text-slate-600 whitespace-nowrap">${escapeHtml(item.kota_alamat || '-')}</td>
                         <td class="px-4 py-3 text-center whitespace-nowrap">
-                            <button onclick="toggleStatusPrint(${item.id})" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${printBadgeClass} transition shadow-xs" title="Klik untuk ubah status print">
+                            <button onclick="toggleStatusPrint('${item.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${printBadgeClass} transition shadow-xs" title="Klik untuk ubah status print">
                                 <i data-lucide="${item.status_print === 'Sudah Diprint' ? 'check' : 'printer'}" class="w-3.5 h-3.5"></i>
                                 <span>${item.status_print}</span>
                             </button>
                         </td>
                         <td class="px-4 py-3 text-right whitespace-nowrap">
                             <div class="flex items-center justify-end gap-1">
-                                <button onclick="showDetail(${item.id})" class="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition" title="Lihat Detail 29 Kolom">
+                                <button onclick="showDetail('${item.id}')" class="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition" title="Lihat Detail 29 Kolom">
                                     Detail
                                 </button>
-                                <button onclick="editData(${item.id})" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
+                                <button onclick="editData('${item.id}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
                                     <i data-lucide="edit-3" class="w-4 h-4"></i>
                                 </button>
-                                <button onclick="deleteData(${item.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition" title="Hapus">
+                                <button onclick="deleteData('${item.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition" title="Hapus">
                                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                                 </button>
                             </div>
@@ -836,7 +905,7 @@
         }
 
         function showDetail(id) {
-            const item = trackerData.find(d => d.id === id);
+            const item = trackerData.find(d => d.id.toString() === id.toString());
             if (!item) return;
 
             document.getElementById('detailModalTitle').innerText = `Order: ${item.order_number || '-'}`;
@@ -917,7 +986,7 @@
 
         async function saveData(e) {
             e.preventDefault();
-            const editId = parseInt(document.getElementById('editIndex').value);
+            const editId = document.getElementById('editIndex').value;
             const saveBtn = document.getElementById('saveBtn');
             saveBtn.disabled = true;
             saveBtn.innerText = 'Menyimpan...';
@@ -941,7 +1010,7 @@
 
             if (isSupabaseActive && supabaseClient) {
                 try {
-                    if (editId !== -1) {
+                    if (editId !== '-1') {
                         const { error } = await supabaseClient.from('orders').update(payload).eq('id', editId);
                         if (error) throw error;
                         showToast('Data diperbarui di Supabase');
@@ -954,21 +1023,21 @@
                     showToast('Gagal menyimpan ke Supabase', true);
                 }
             } else {
-                if (editId !== -1) {
-                    const idx = trackerData.findIndex(d => d.id === editId);
+                if (editId !== '-1') {
+                    const idx = trackerData.findIndex(d => d.id.toString() === editId.toString());
                     if (idx !== -1) trackerData[idx] = { ...trackerData[idx], ...payload };
                     showToast('Data berhasil diperbarui');
                 } else {
-                    trackerData.unshift({ id: Date.now(), ...payload });
+                    trackerData.unshift({ id: Date.now() + Math.random(), ...payload });
                     showToast('Data berhasil ditambahkan');
                 }
-                saveLocalToStorage();
+                await saveLocalToStorage();
             }
 
             saveBtn.disabled = false;
             saveBtn.innerText = 'Simpan';
             closeModal();
-            loadData();
+            await loadData();
         }
 
         async function deleteData(id) {
@@ -983,11 +1052,11 @@
                     showToast('Gagal menghapus dari Supabase', true);
                 }
             } else {
-                trackerData = trackerData.filter(d => d.id !== id);
-                saveLocalToStorage();
+                trackerData = trackerData.filter(d => d.id.toString() !== id.toString());
+                await saveLocalToStorage();
                 showToast('Data berhasil dihapus');
             }
-            loadData();
+            await loadData();
         }
 
         function openModal(isEdit = false) {
@@ -1003,7 +1072,7 @@
         function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
 
         function editData(id) {
-            const item = trackerData.find(d => d.id === id);
+            const item = trackerData.find(d => d.id.toString() === id.toString());
             if (!item) return;
 
             document.getElementById('editIndex').value = item.id;
